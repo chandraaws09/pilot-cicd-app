@@ -33,10 +33,7 @@ stages:
                 az acr login --name $(acrName)
 
                 echo "Building image $(imageName):$(imageTag)"
-                docker build \
-                  -t $(acrName).azurecr.io/$(imageName):$(imageTag) \
-                  -t $(acrName).azurecr.io/$(imageName):latest \
-                  .
+                docker build -t $(acrName).azurecr.io/$(imageName):$(imageTag) -t $(acrName).azurecr.io/$(imageName):latest .
 
                 echo "Pushing images to ACR"
                 docker push $(acrName).azurecr.io/$(imageName):$(imageTag)
@@ -46,30 +43,30 @@ stages:
     displayName: 'Deploy to AKS'
     dependsOn: Build
     jobs:
-      - job: DeployToAKS
+      - deployment: DeployToAKS
         displayName: 'kubectl rollout'
-        steps:
-          - task: AzureCLI@2
-            displayName: 'Update AKS deployment'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                echo "Fetching AKS credentials"
-                az aks get-credentials \
-                  --resource-group $(resourceGroup) \
-                  --name $(aksCluster) \
-                  --overwrite-existing
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: AzureCLI@2
+                  displayName: 'Update AKS deployment'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      echo "Fetching AKS credentials"
+                      az aks get-credentials --resource-group $(resourceGroup) --name $(aksCluster) --overwrite-existing
 
-                echo "Ensuring namespace and service exist"
-                kubectl apply -f k8s/namespace.yaml
-                kubectl apply -f k8s/service.yaml
+                      echo "Ensuring namespace and service exist"
+                      kubectl apply -f k8s/namespace.yaml
+                      kubectl apply -f k8s/service.yaml
 
-                echo "Rolling out new image: $(acrName).azurecr.io/$(imageName):$(imageTag)"
-                kubectl set image deployment/pilot-app \
-                  pilot-app=$(acrName).azurecr.io/$(imageName):$(imageTag) \
-                  -n $(namespace)
+                      echo "Rolling out new image: $(acrName).azurecr.io/$(imageName):$(imageTag)"
+                      kubectl set image deployment/pilot-app pilot-app=$(acrName).azurecr.io/$(imageName):$(imageTag) -n $(namespace)
 
-                echo "Waiting for rollout to complete"
-                kubectl rollout status deployment/pilot-app -n $(namespace) --timeout=180s
+                      echo "Waiting for rollout to complete"
+                      kubectl rollout status deployment/pilot-app -n $(namespace) --timeout=180s
