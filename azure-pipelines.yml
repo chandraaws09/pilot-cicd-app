@@ -1,0 +1,75 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureServiceConnection: 'chandra-pilot-azure-connection'
+  acrName: 'chandrapilotacr'
+  resourceGroup: 'chandra-pilot-rg'
+  aksCluster: 'chandra-pilot-aks'
+  imageName: 'pilot-app'
+  imageTag: '$(Build.BuildId)'
+  namespace: 'pilot-app'
+
+stages:
+  - stage: Build
+    displayName: 'Build and push image'
+    jobs:
+      - job: BuildAndPush
+        displayName: 'ACR build'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'az acr build'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                echo "Building image $(imageName):$(imageTag) via ACR Tasks"
+                az acr build \
+                  --registry $(acrName) \
+                  --image $(imageName):$(imageTag) \
+                  --image $(imageName):latest \
+                  .
+
+  - stage: Deploy
+    displayName: 'Deploy to AKS'
+    dependsOn: Build
+    jobs:
+      - job: DeployToAKS
+        displayName: 'kubectl rollout'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Update AKS deployment'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                echo "Fetching AKS credentials"
+                az aks get-credentials \
+                  --resource-group $(resourceGroup) \
+                  --name $(aksCluster) \
+                  --overwrite-existing
+
+                echo "Ensuring namespace and service exist"
+                kubectl apply -f k8s/namespace.yaml
+                kubectl apply -f k8s/service.yaml
+
+                echo "Rolling out new image: $(acrName).azurecr.io/$(imageName):$(imageTag)"
+                kubectl set image deployment/pilot-app \
+                  pilot-app=$(acrName).azurecr.io/$(imageName):$(imageTag) \
+                  -n $(namespace)
+
+                echo "Waiting for rollout to complete"
+                kubectl rollout status deployment/pilot-app -n $(namespace) --timeout=180s
+
