@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pilot-app-ingress
+  annotations:
+    kubernetes.io/ingress.class: webapprouting.kubernetes.azure.com
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pilot-app
+            port:
+              number: 80
