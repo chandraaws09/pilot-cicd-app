@@ -45,7 +45,7 @@ stages:
     jobs:
       - deployment: DeployToAKS
         displayName: 'kubectl rollout'
-        environment: 'production'
+        environment: 'production Resource'
         strategy:
           runOnce:
             deploy:
