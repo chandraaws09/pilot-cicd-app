@@ -28,18 +28,24 @@ stages:
         displayName: 'ACR build'
         steps:
           - task: AzureCLI@2
-            displayName: 'az acr build'
+            displayName: 'docker build and push'
             inputs:
               azureSubscription: '$(azureServiceConnection)'
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                echo "Building image $(imageName):$(imageTag) via ACR Tasks"
-                az acr build \
-                  --registry $(acrName) \
-                  --image $(imageName):$(imageTag) \
-                  --image $(imageName):latest \
+                echo "Logging in to ACR"
+                az acr login --name $(acrName)
+
+                echo "Building image $(imageName):$(imageTag)"
+                docker build \
+                  -t $(acrName).azurecr.io/$(imageName):$(imageTag) \
+                  -t $(acrName).azurecr.io/$(imageName):latest \
                   .
+
+                echo "Pushing images to ACR"
+                docker push $(acrName).azurecr.io/$(imageName):$(imageTag)
+                docker push $(acrName).azurecr.io/$(imageName):latest
 
   - stage: Deploy
     displayName: 'Deploy to AKS'
@@ -72,4 +78,5 @@ stages:
 
                 echo "Waiting for rollout to complete"
                 kubectl rollout status deployment/pilot-app -n $(namespace) --timeout=180s
+
 
