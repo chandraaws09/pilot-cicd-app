@@ -47,6 +47,7 @@ jobs:
 
       - name: Deploy
         run: |
+          kubectl apply -f k8s/deployment.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/service.yaml -n ${{ env.NAMESPACE }}
           kubectl apply -f k8s/ingress.yaml -n ${{ env.NAMESPACE }}
           kubectl set image deployment/pilot-app pilot-app=${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} -n ${{ env.NAMESPACE }}
